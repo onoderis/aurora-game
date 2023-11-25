@@ -1,3 +1,4 @@
+use std::time::Duration;
 use bevy::math::{vec3};
 use bevy::prelude::*;
 use bevy::sprite::collide_aabb::collide;
@@ -9,7 +10,10 @@ fn main() {
         .add_systems(Update, input_to_event)
         .add_systems(Update, player_move_event_handler)
         .add_systems(Update, gravity)
+        .add_systems(Update, start_jump)
+        .add_systems(Update, jump_lift)
         .add_event::<PlayerMoveEvent>()
+        .add_event::<PlayerJumpEvent>()
         .run();
 }
 
@@ -21,7 +25,9 @@ struct PlayerBundle {
 
 /// Controllable entity by a player.
 #[derive(Component)]
-struct Player;
+struct Player {
+    jumping_timer: Option<Timer>,
+}
 
 /// Obstacle for a player.
 #[derive(Component)]
@@ -32,10 +38,11 @@ struct PlayerMoveEvent {
     direction: MoveDirection
 }
 
+#[derive(Event)]
+struct PlayerJumpEvent;
+
 #[derive(Copy, Clone)]
 enum MoveDirection {
-    Up,
-    Down,
     Left,
     Right,
 }
@@ -47,7 +54,7 @@ fn setup(mut commands: Commands) {
     // Player
     commands.spawn(
         PlayerBundle {
-            player: Player {},
+            player: Player { jumping_timer: None },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
                     translation: Vec3::new(0., 0., 10.),
@@ -84,12 +91,10 @@ fn setup(mut commands: Commands) {
 fn input_to_event(
     key_input: Res<Input<KeyCode>>,
     mut event_player_move: EventWriter<PlayerMoveEvent>,
+    mut event_player_jump: EventWriter<PlayerJumpEvent>,
 ) {
-    if key_input.pressed(KeyCode::W) {
-        event_player_move.send(PlayerMoveEvent { direction: MoveDirection::Up })
-    }
-    if key_input.pressed(KeyCode::S) {
-        event_player_move.send(PlayerMoveEvent { direction: MoveDirection::Down })
+    if key_input.pressed(KeyCode::Space) {
+        event_player_jump.send(PlayerJumpEvent)
     }
     if key_input.pressed(KeyCode::A) {
         event_player_move.send(PlayerMoveEvent { direction: MoveDirection::Left })
@@ -128,7 +133,7 @@ fn gravity(
 ) {
     for mut player_transform in player.iter_mut() {
         for obstacle_transform in obstacles.iter() {
-            let new_player_pos = player_transform.translation + vec3(0., -2., 0.);
+            let new_player_pos = player_transform.translation + vec3(0., -5., 0.);
             let opt_collision = collide(
                 new_player_pos,
                 player_transform.scale.xy(),
@@ -146,15 +151,38 @@ fn gravity(
     }
 }
 
+fn start_jump(
+    mut event_jump: EventReader<PlayerJumpEvent>,
+    mut players: Query<&mut Player>,
+) {
+    for _ in event_jump.read() {
+        for mut player in players.iter_mut() {
+            player.jumping_timer = Some(Timer::from_seconds(0.5, TimerMode::Once));
+        }
+    }
+}
+
+fn jump_lift(
+    mut players: Query<(&mut Transform, &mut Player)>,
+    time: Res<Time>,
+) {
+    for (mut transform, mut player) in players.iter_mut() {
+        if let Some(timer) = player.jumping_timer.as_mut() {
+            timer.tick(time.delta());
+            if timer.remaining() > Duration::ZERO {
+                transform.translation.y += 11.0; // 6 + gravity
+            }
+        }
+    }
+}
+
 
 
 // util functions
 
 fn map_direction_to_vec3(direction: MoveDirection) -> Vec3 {
     match direction {
-        MoveDirection::Up => vec3(0., 3., 0.),
-        MoveDirection::Down => vec3(0., -3., 0.),
-        MoveDirection::Left => vec3(-3., 0., 0.),
-        MoveDirection::Right => vec3(3., 0., 0.),
+        MoveDirection::Left => vec3(-5., 0., 0.),
+        MoveDirection::Right => vec3(5., 0., 0.),
     }
 }
