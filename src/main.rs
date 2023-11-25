@@ -8,7 +8,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
         .add_systems(Update, input_to_event)
-        .add_systems(Update, player_move_event_handler)
+        .add_systems(Update, player_movement)
         .add_systems(Update, gravity)
         .add_systems(Update, start_jump)
         .add_systems(Update, jump_lift)
@@ -75,8 +75,8 @@ fn setup(mut commands: Commands) {
         Obstacle {},
         SpriteBundle {
             transform: Transform {
-                translation: Vec3::new(0., -300., 0.),
-                scale: Vec3::new(10000., 20., 0.),
+                translation: Vec3::new(0., -330., 0.),
+                scale: Vec3::new(10000., 60., 0.),
                 ..default()
             },
             sprite: Sprite {
@@ -87,12 +87,12 @@ fn setup(mut commands: Commands) {
         },
     ));
 
-    // Wall
+    // Box
     commands.spawn((
         Obstacle {},
         SpriteBundle {
             transform: Transform {
-                translation: Vec3::new(100., -300., 0.),
+                translation: Vec3::new(101., -200., 0.),
                 scale: Vec3::new(200., 200., 0.),
                 ..default()
             },
@@ -121,25 +121,29 @@ fn input_to_event(
     }
 }
 
-fn player_move_event_handler(
+fn player_movement(
     mut event_player_move: EventReader<PlayerMoveEvent>,
     mut player: Query<&mut Transform, (With<Player>, Without<Obstacle>)>,
     obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
 ) {
-    for event in event_player_move.read() {
-        for mut player_transform in player.iter_mut() {
-            for obstacle_transform in obstacles.iter() {
-                let new_player_pos = player_transform.translation + map_direction_to_vec3(event.direction);
-                let opt_collision = collide(
-                    new_player_pos,
-                    player_transform.scale.xy(),
-                    obstacle_transform.translation,
-                    obstacle_transform.scale.truncate()
-                );
-                if opt_collision.is_none() {
-                    player_transform.translation = new_player_pos;
-                }
-            }
+    let event = if let Some(event) = event_player_move.read().next() {
+        event
+    } else {
+        return;
+    };
+
+    for mut player_transform in player.iter_mut() {
+        let new_player_pos = player_transform.translation + map_direction_to_vec3(event.direction);
+        let collision_obstacle_opt = obstacles.iter().find(|obstacle_transform| {
+            collide(
+                new_player_pos,
+                player_transform.scale.xy(),
+                obstacle_transform.translation,
+                obstacle_transform.scale.xy(),
+            ).is_some()
+        });
+        if collision_obstacle_opt.is_none() {
+            player_transform.translation = new_player_pos;
         }
     }
 }
