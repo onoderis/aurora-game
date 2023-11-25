@@ -8,6 +8,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Update, input_to_event)
         .add_systems(Update, player_move_event_handler)
+        .add_systems(Update, gravity)
         .add_event::<PlayerMoveEvent>()
         .run();
 }
@@ -104,14 +105,28 @@ fn player_move_event_handler(
     obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
 ) {
     for event in event_player_move.read() {
-        let direction = event.direction;
         for mut player_transform in player.iter_mut() {
             for obstacle_transform in obstacles.iter() {
-                let new_player_pos = player_transform.translation + map_direction_to_vec3(direction);
+                let new_player_pos = player_transform.translation + map_direction_to_vec3(event.direction);
                 let collide = is_collide(new_player_pos, player_transform.scale, obstacle_transform.clone());
                 if !collide {
                     player_transform.translation = new_player_pos;
                 }
+            }
+        }
+    }
+}
+
+fn gravity(
+    mut player: Query<&mut Transform, (With<Player>, Without<Obstacle>)>,
+    obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
+) {
+    for mut player_transform in player.iter_mut() {
+        for obstacle_transform in obstacles.iter() {
+            let new_player_pos = player_transform.translation + vec3(0., -5., 0.);
+            let collide = is_collide(new_player_pos, player_transform.scale, obstacle_transform.clone());
+            if !collide {
+                player_transform.translation = new_player_pos;
             }
         }
     }
