@@ -178,6 +178,8 @@ fn gravity(
 fn start_jump(
     mut event_jump: EventReader<PlayerJumpEvent>,
     mut players: Query<&mut Player>,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
 ) {
     for _ in event_jump.read() {
         for mut player in players.iter_mut() {
@@ -185,6 +187,10 @@ fn start_jump(
                 continue;
             }
             player.jumping_timer = Some(Timer::from_seconds(0.5, TimerMode::Once));
+            commands.spawn(AudioBundle {
+                source: asset_server.load("sounds/jump.ogg"),
+                ..default()
+            });
         }
     }
 }
