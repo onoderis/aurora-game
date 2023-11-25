@@ -4,7 +4,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        // .add_system(input)
+        .add_systems(Update, input)
         .run();
 }
 
@@ -45,4 +45,30 @@ fn setup(mut commands: Commands) {
             },
         }
     );
+}
+
+fn input(
+    key_input: Res<Input<KeyCode>>,
+    mut pts: Query<&mut Transform, With<Controllable>>,
+) {
+    if key_input.pressed(KeyCode::W) {
+        for mut pt in &mut pts {
+            pt.translation.y += 3.;
+        }
+    }
+    if key_input.pressed(KeyCode::S) {
+        for mut pt in &mut pts {
+            pt.translation.y -= 3.;
+        }
+    }
+    if key_input.pressed(KeyCode::A) {
+        for mut pt in &mut pts {
+            pt.translation.x -= 3.;
+        }
+    }
+    if key_input.pressed(KeyCode::D) {
+        for mut pt in &mut pts {
+            pt.translation.x += 3.;
+        }
+    }
 }
