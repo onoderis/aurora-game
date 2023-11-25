@@ -38,13 +38,29 @@ fn setup(mut commands: Commands) {
                     scale: Vec3::new(100., 100., 0.),
                 },
                 sprite: Sprite {
-                    color: Color::BLUE,
+                    color: Color::GOLD,
                     ..default()
                 },
                 ..default()
             },
         }
     );
+
+    // Floor
+    commands.spawn((
+        SpriteBundle {
+            transform: Transform {
+                translation: Vec3::new(0., -300., 0.),
+                scale: Vec3::new(10000., 20., 0.),
+                ..default()
+            },
+            sprite: Sprite {
+                color: Color::YELLOW_GREEN,
+                ..default()
+            },
+            ..default()
+        },
+    ));
 }
 
 fn input(
