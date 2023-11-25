@@ -181,17 +181,18 @@ fn start_jump(
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    for _ in event_jump.read() {
-        for mut player in players.iter_mut() {
-            if !player.on_ground {
-                continue;
-            }
-            player.jumping_timer = Some(Timer::from_seconds(0.5, TimerMode::Once));
-            commands.spawn(AudioBundle {
-                source: asset_server.load("sounds/jump.ogg"),
-                ..default()
-            });
+    if event_jump.read().next().is_none() {
+        return
+    }
+    for mut player in players.iter_mut() {
+        if !player.on_ground {
+            continue;
         }
+        player.jumping_timer = Some(Timer::from_seconds(0.5, TimerMode::Once));
+        commands.spawn(AudioBundle {
+            source: asset_server.load("sounds/jump.ogg"),
+            ..default()
+        });
     }
 }
 
