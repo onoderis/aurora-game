@@ -57,7 +57,7 @@ fn setup(mut commands: Commands) {
             player: Player { jumping_timer: None },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
-                    translation: Vec3::new(0., 0., 10.),
+                    translation: Vec3::new(-300., 0., 10.),
                     rotation: Quat::IDENTITY,
                     scale: Vec3::new(100., 100., 0.),
                 },
@@ -77,6 +77,23 @@ fn setup(mut commands: Commands) {
             transform: Transform {
                 translation: Vec3::new(0., -300., 0.),
                 scale: Vec3::new(10000., 20., 0.),
+                ..default()
+            },
+            sprite: Sprite {
+                color: Color::YELLOW_GREEN,
+                ..default()
+            },
+            ..default()
+        },
+    ));
+
+    // Wall
+    commands.spawn((
+        Obstacle {},
+        SpriteBundle {
+            transform: Transform {
+                translation: Vec3::new(100., -300., 0.),
+                scale: Vec3::new(200., 200., 0.),
                 ..default()
             },
             sprite: Sprite {
@@ -132,21 +149,22 @@ fn gravity(
     obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
 ) {
     for mut player_transform in player.iter_mut() {
-        for obstacle_transform in obstacles.iter() {
-            let new_player_pos = player_transform.translation + vec3(0., -5., 0.);
-            let opt_collision = collide(
+        let new_player_pos = player_transform.translation + vec3(0., -5., 0.);
+        let collision_obstacle_opt = obstacles.iter().find(|obstacle_transform| {
+            collide(
                 new_player_pos,
                 player_transform.scale.xy(),
                 obstacle_transform.translation,
-                obstacle_transform.scale.xy()
-            );
-            if opt_collision.is_none() {
-                player_transform.translation = new_player_pos;
-            } else {
-                // ground the player
-                player_transform.translation.y = obstacle_transform.translation.y +
-                    obstacle_transform.scale.y / 2.0 + player_transform.scale.y / 2.0;
-            }
+                obstacle_transform.scale.xy(),
+            ).is_some()
+        });
+
+        if let Some(collision_obstacle) = collision_obstacle_opt {
+            // ground the player
+            player_transform.translation.y = collision_obstacle.translation.y +
+                collision_obstacle.scale.y / 2.0 + player_transform.scale.y / 2.0;
+        } else {
+            player_transform.translation = new_player_pos;
         }
     }
 }
