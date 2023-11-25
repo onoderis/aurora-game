@@ -26,6 +26,7 @@ struct PlayerBundle {
 /// Controllable entity by a player.
 #[derive(Component)]
 struct Player {
+    on_ground: bool,
     jumping_timer: Option<Timer>,
 }
 
@@ -54,7 +55,7 @@ fn setup(mut commands: Commands) {
     // Player
     commands.spawn(
         PlayerBundle {
-            player: Player { jumping_timer: None },
+            player: Player { on_ground: false, jumping_timer: None },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
                     translation: Vec3::new(-300., 0., 10.),
@@ -149,10 +150,10 @@ fn player_movement(
 }
 
 fn gravity(
-    mut player: Query<&mut Transform, (With<Player>, Without<Obstacle>)>,
+    mut player: Query<(&mut Transform, &mut Player), Without<Obstacle>>,
     obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
 ) {
-    for mut player_transform in player.iter_mut() {
+    for (mut player_transform, mut player) in player.iter_mut() {
         let new_player_pos = player_transform.translation + vec3(0., -5., 0.);
         let collision_obstacle_opt = obstacles.iter().find(|obstacle_transform| {
             collide(
@@ -167,6 +168,7 @@ fn gravity(
             // ground the player
             player_transform.translation.y = collision_obstacle.translation.y +
                 collision_obstacle.scale.y / 2.0 + player_transform.scale.y / 2.0;
+            player.on_ground = true;
         } else {
             player_transform.translation = new_player_pos;
         }
@@ -179,6 +181,9 @@ fn start_jump(
 ) {
     for _ in event_jump.read() {
         for mut player in players.iter_mut() {
+            if !player.on_ground {
+                continue;
+            }
             player.jumping_timer = Some(Timer::from_seconds(0.5, TimerMode::Once));
         }
     }
@@ -192,7 +197,8 @@ fn jump_lift(
         if let Some(timer) = player.jumping_timer.as_mut() {
             timer.tick(time.delta());
             if timer.remaining() > Duration::ZERO {
-                transform.translation.y += 11.0; // 6 + gravity
+                transform.translation.y += 12.0; // 7 + gravity
+                player.on_ground = false;
             }
         }
     }
