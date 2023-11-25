@@ -108,8 +108,13 @@ fn player_move_event_handler(
         for mut player_transform in player.iter_mut() {
             for obstacle_transform in obstacles.iter() {
                 let new_player_pos = player_transform.translation + map_direction_to_vec3(event.direction);
-                let collide = is_collide(new_player_pos, player_transform.scale, obstacle_transform.clone());
-                if !collide {
+                let opt_collision = collide(
+                    new_player_pos,
+                    player_transform.scale.xy(),
+                    obstacle_transform.translation,
+                    obstacle_transform.scale.truncate()
+                );
+                if opt_collision.is_none() {
                     player_transform.translation = new_player_pos;
                 }
             }
@@ -123,10 +128,19 @@ fn gravity(
 ) {
     for mut player_transform in player.iter_mut() {
         for obstacle_transform in obstacles.iter() {
-            let new_player_pos = player_transform.translation + vec3(0., -5., 0.);
-            let collide = is_collide(new_player_pos, player_transform.scale, obstacle_transform.clone());
-            if !collide {
+            let new_player_pos = player_transform.translation + vec3(0., -2., 0.);
+            let opt_collision = collide(
+                new_player_pos,
+                player_transform.scale.xy(),
+                obstacle_transform.translation,
+                obstacle_transform.scale.xy()
+            );
+            if opt_collision.is_none() {
                 player_transform.translation = new_player_pos;
+            } else {
+                // ground the player
+                player_transform.translation.y = obstacle_transform.translation.y +
+                    obstacle_transform.scale.y / 2.0 + player_transform.scale.y / 2.0;
             }
         }
     }
@@ -135,15 +149,6 @@ fn gravity(
 
 
 // util functions
-
-fn is_collide(translation1: Vec3, scale1: Vec3, t2: Transform) -> bool {
-    return collide(
-        translation1,
-        scale1.truncate(),
-        t2.translation,
-        t2.scale.truncate()
-    ).is_some();
-}
 
 fn map_direction_to_vec3(direction: MoveDirection) -> Vec3 {
     match direction {
