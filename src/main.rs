@@ -113,6 +113,23 @@ fn setup(mut commands: Commands) {
             ..default()
         },
     ));
+
+    // Ceiling
+    commands.spawn((
+        Obstacle {},
+        SpriteBundle {
+            transform: Transform {
+                translation: Vec3::new(-450., 0., 0.),
+                scale: Vec3::new(200., 200., 0.),
+                ..default()
+            },
+            sprite: Sprite {
+                color: Color::YELLOW_GREEN,
+                ..default()
+            },
+            ..default()
+        },
+    ));
 }
 
 fn input_to_event(
@@ -120,7 +137,7 @@ fn input_to_event(
     mut event_player_move: EventWriter<PlayerMoveEvent>,
     mut event_player_jump: EventWriter<PlayerJumpEvent>,
 ) {
-    if key_input.pressed(KeyCode::Space) {
+    if key_input.just_pressed(KeyCode::Space) {
         event_player_jump.send(PlayerJumpEvent)
     }
     if key_input.pressed(KeyCode::A) {
@@ -157,6 +174,8 @@ fn player_movement(
     obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
 ) {
     for (mut player, mut p_transform) in players.iter_mut() {
+        let mut has_bottom_collision = false;
+
         for o_transform in obstacles.iter() {
             let new_player_pos = p_transform.translation + player.movement_vec.to_vec3();
             let collision_opt = collide(
@@ -191,7 +210,7 @@ fn player_movement(
                             - p_transform.translation.y
                             + p_transform.scale.y / 2.
                             + o_transform.scale.y / 2.;
-                        player.on_ground = true;
+                        has_bottom_collision = true;
                     }
                     Collision::Inside => {}
                 }
@@ -200,6 +219,7 @@ fn player_movement(
 
         p_transform.translation += player.movement_vec.to_vec3();
         player.movement_vec = Vec2::ZERO;
+        player.on_ground = has_bottom_collision;
     }
 }
 
@@ -233,7 +253,6 @@ fn jump_lift(
             timer.tick(time.delta());
             if timer.remaining() > Duration::ZERO {
                 player.movement_vec.y += timer.remaining().as_secs_f32() * 35.;
-                player.on_ground = false;
             }
         }
     }
