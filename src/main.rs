@@ -16,6 +16,7 @@ fn main() {
         .add_systems(Update, start_dash)
         .add_systems(Update, dash_move)
         .add_systems(Update, player_movement)
+        .add_systems(Update, reset_dash)
         .add_event::<PlayerMoveEvent>()
         .add_event::<PlayerJumpEvent>()
         .add_event::<PlayerDashEvent>()
@@ -44,6 +45,7 @@ struct Player {
     movement_vec: Vec2,
     jumping_timer: Option<Timer>,
     dashing: Option<Dashing>,
+    can_dash: bool,
 }
 
 /// Obstacle for a player.
@@ -101,6 +103,7 @@ fn setup(mut commands: Commands) {
                 movement_vec: Vec2 { x: 0., y: 0. },
                 jumping_timer: None,
                 dashing: None,
+                can_dash: false,
             },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
@@ -151,7 +154,7 @@ fn setup(mut commands: Commands) {
         },
     ));
 
-    // Ceiling
+    // Box in air
     commands.spawn((
         Obstacle,
         SpriteBundle {
@@ -359,10 +362,15 @@ fn start_dash(
     };
 
     for mut player in players.iter_mut() {
+        if !player.can_dash {
+            continue;
+        }
+
         player.dashing = Some(Dashing {
             direction,
             timer: Timer::new(DASH_DURATION, TimerMode::Once)
         });
+        player.can_dash = false;
         commands.spawn(AudioBundle {
             source: asset_server.load("sounds/dash.ogg"),
             ..default()
@@ -393,6 +401,13 @@ fn dash_move(
     }
 }
 
+fn reset_dash(mut players: Query<&mut Player>) {
+    for mut player in players.iter_mut() {
+        if player.on_ground {
+            player.can_dash = true;
+        }
+    }
+}
 
 // util functions
 
