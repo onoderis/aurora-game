@@ -1,5 +1,5 @@
 use std::time::Duration;
-use bevy::math::{vec2, vec3};
+use bevy::math::vec2;
 use bevy::prelude::*;
 use bevy::sprite::collide_aabb::{collide, Collision};
 
@@ -18,7 +18,8 @@ fn main() {
         .run();
 }
 
-const GRAVITY: f32 = -5.;
+const GRAVITY: f32 = -9.;
+const JUMP_DURATION: Duration = Duration::from_millis(750);
 
 #[derive(Bundle)]
 struct PlayerBundle {
@@ -215,7 +216,7 @@ fn start_jump(
         if !player.on_ground {
             continue;
         }
-        player.jumping_timer = Some(Timer::from_seconds(0.5, TimerMode::Once));
+        player.jumping_timer = Some(Timer::new(JUMP_DURATION, TimerMode::Once));
         commands.spawn(AudioBundle {
             source: asset_server.load("sounds/jump.ogg"),
             ..default()
@@ -231,7 +232,7 @@ fn jump_lift(
         if let Some(timer) = player.jumping_timer.as_mut() {
             timer.tick(time.delta());
             if timer.remaining() > Duration::ZERO {
-                player.movement_vec.y += (GRAVITY * -1.) + 7.;
+                player.movement_vec.y += timer.remaining().as_secs_f32() * 35.;
                 player.on_ground = false;
             }
         }
