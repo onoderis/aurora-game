@@ -13,13 +13,17 @@ fn main() {
         .add_systems(Update, start_jump)
         .add_systems(Update, jump_lift)
         .add_systems(Update, player_movement)
+        .add_systems(Update, ceiling_jump_stop)
         .add_event::<PlayerMoveEvent>()
         .add_event::<PlayerJumpEvent>()
+        .add_event::<CeilingBumpEvent>()
         .run();
 }
 
 const GRAVITY: f32 = -9.;
 const JUMP_DURATION: Duration = Duration::from_millis(750);
+const JUMP_POWER: f32 = 35.;
+const JUMP_ENDING_DURATION: Duration = Duration::from_millis(((GRAVITY * -1.) / JUMP_POWER * 1000.) as u64);
 
 #[derive(Bundle)]
 struct PlayerBundle {
@@ -46,6 +50,9 @@ struct PlayerMoveEvent {
 
 #[derive(Event)]
 struct PlayerJumpEvent;
+
+#[derive(Event)]
+struct CeilingBumpEvent;
 
 #[derive(Copy, Clone)]
 enum MoveDirection {
@@ -82,7 +89,7 @@ fn setup(mut commands: Commands) {
 
     // Floor
     commands.spawn((
-        Obstacle {},
+        Obstacle,
         SpriteBundle {
             transform: Transform {
                 translation: Vec3::new(0., -330., 0.),
@@ -99,7 +106,7 @@ fn setup(mut commands: Commands) {
 
     // Box
     commands.spawn((
-        Obstacle {},
+        Obstacle,
         SpriteBundle {
             transform: Transform {
                 translation: Vec3::new(101., -200., 0.),
@@ -116,7 +123,7 @@ fn setup(mut commands: Commands) {
 
     // Ceiling
     commands.spawn((
-        Obstacle {},
+        Obstacle,
         SpriteBundle {
             transform: Transform {
                 translation: Vec3::new(-450., 0., 0.),
@@ -172,9 +179,11 @@ fn gravity(mut players: Query<&mut Player>) {
 fn player_movement(
     mut players: Query<(&mut Player, &mut Transform), Without<Obstacle>>,
     obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
+    mut ceiling_event: EventWriter<CeilingBumpEvent>,
 ) {
     for (mut player, mut p_transform) in players.iter_mut() {
         let mut has_bottom_collision = false;
+        let mut ceiling_bump = false;
 
         for o_transform in obstacles.iter() {
             let new_player_pos = p_transform.translation + player.movement_vec.to_vec3();
@@ -204,6 +213,7 @@ fn player_movement(
                             - p_transform.translation.y
                             - p_transform.scale.y / 2.
                             - o_transform.scale.y / 2.;
+                        ceiling_bump = true
                     }
                     Collision::Bottom => {
                         player.movement_vec.y = o_transform.translation.y
@@ -220,6 +230,9 @@ fn player_movement(
         p_transform.translation += player.movement_vec.to_vec3();
         player.movement_vec = Vec2::ZERO;
         player.on_ground = has_bottom_collision;
+        if ceiling_bump {
+            ceiling_event.send(CeilingBumpEvent);
+        }
     }
 }
 
@@ -252,7 +265,24 @@ fn jump_lift(
         if let Some(timer) = player.jumping_timer.as_mut() {
             timer.tick(time.delta());
             if timer.remaining() > Duration::ZERO {
-                player.movement_vec.y += timer.remaining().as_secs_f32() * 35.;
+                player.movement_vec.y += timer.remaining().as_secs_f32() * JUMP_POWER;
+            }
+        }
+    }
+}
+
+fn ceiling_jump_stop(
+    mut ceiling_event: EventReader<CeilingBumpEvent>,
+    mut players: Query<&mut Player>,
+) {
+    if ceiling_event.read().next().is_none() {
+        return;
+    }
+
+    for mut player in players.iter_mut() {
+        if let Some(timer) = player.jumping_timer.as_mut() {
+            if timer.remaining() > JUMP_ENDING_DURATION {
+                timer.set_duration(JUMP_ENDING_DURATION);
             }
         }
     }
