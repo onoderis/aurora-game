@@ -9,18 +9,20 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Update, input_to_event)
         .add_systems(Update, player_movement_intention)
-        .add_systems(Update, gravity)
         .add_systems(Update, start_jump)
         .add_systems(Update, jump_lift)
         .add_systems(Update, ceiling_jump_stop)
         .add_systems(Update, start_dash)
         .add_systems(Update, dash_move)
+        .add_systems(Update, climb)
+        .add_systems(Update, gravity)
         .add_systems(Update, player_movement)
         .add_systems(Update, reset_dash)
         .add_event::<PlayerMoveEvent>()
         .add_event::<PlayerJumpEvent>()
         .add_event::<PlayerDashEvent>()
         .add_event::<CeilingBumpEvent>()
+        .add_event::<PlayerClimbEvent>()
         .run();
 }
 
@@ -46,11 +48,15 @@ struct Player {
     jumping_timer: Option<Timer>,
     dashing: Option<Dashing>,
     can_dash: bool,
+    climbing: bool,
 }
 
 /// Obstacle for a player.
 #[derive(Component)]
 struct Obstacle;
+
+#[derive(Component)]
+struct Climbable;
 
 #[derive(Event)]
 struct PlayerMoveEvent {
@@ -91,6 +97,10 @@ struct Dashing {
     timer: Timer,
 }
 
+#[derive(Event)]
+struct PlayerClimbEvent;
+
+
 fn setup(mut commands: Commands) {
     // Camera
     commands.spawn(Camera2dBundle::default());
@@ -104,12 +114,13 @@ fn setup(mut commands: Commands) {
                 jumping_timer: None,
                 dashing: None,
                 can_dash: false,
+                climbing: false,
             },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
                     translation: Vec3::new(-300., 0., 10.),
                     rotation: Quat::IDENTITY,
-                    scale: Vec3::new(100., 100., 0.),
+                    scale: Vec3::new(50., 70., 0.),
                 },
                 sprite: Sprite {
                     color: Color::GOLD,
@@ -140,6 +151,7 @@ fn setup(mut commands: Commands) {
     // Box
     commands.spawn((
         Obstacle,
+        Climbable,
         SpriteBundle {
             transform: Transform {
                 translation: Vec3::new(101., -200., 0.),
@@ -154,9 +166,10 @@ fn setup(mut commands: Commands) {
         },
     ));
 
-    // Box in air
+    // Box in the air
     commands.spawn((
         Obstacle,
+        Climbable,
         SpriteBundle {
             transform: Transform {
                 translation: Vec3::new(-450., 0., 0.),
@@ -177,10 +190,8 @@ fn input_to_event(
     mut event_player_move: EventWriter<PlayerMoveEvent>,
     mut event_player_jump: EventWriter<PlayerJumpEvent>,
     mut event_player_dash: EventWriter<PlayerDashEvent>,
+    mut event_player_climb: EventWriter<PlayerClimbEvent>,
 ) {
-    if key_input.just_pressed(KeyCode::X) {
-        event_player_jump.send(PlayerJumpEvent)
-    }
     if key_input.pressed(KeyCode::Left) {
         event_player_move.send(PlayerMoveEvent { direction: MoveDirection::Left })
     }
@@ -188,7 +199,11 @@ fn input_to_event(
         event_player_move.send(PlayerMoveEvent { direction: MoveDirection::Right })
     }
 
-    if key_input.just_pressed(KeyCode::Z) {
+    if key_input.just_pressed(KeyCode::C) {
+        event_player_jump.send(PlayerJumpEvent)
+    }
+
+    if key_input.just_pressed(KeyCode::X) {
         let direction = match (key_input.pressed(KeyCode::Up),
                key_input.pressed(KeyCode::Down),
                key_input.pressed(KeyCode::Left),
@@ -207,6 +222,10 @@ fn input_to_event(
         if let Some(direction) = direction {
             event_player_dash.send(PlayerDashEvent { direction });
         }
+    }
+
+    if key_input.pressed(KeyCode::Z) {
+        event_player_climb.send(PlayerClimbEvent);
     }
 }
 
@@ -231,6 +250,16 @@ fn player_movement_intention(
 
 fn gravity(mut players: Query<&mut Player>) {
     for mut player in players.iter_mut() {
+        // disable gravity while dashing
+        if player.dashing.is_some() {
+            continue;
+        }
+
+        // disable gravity while climbing
+        if player.climbing {
+            continue;
+        }
+
         player.movement_vec += vec2(0., GRAVITY);
     }
 }
@@ -396,7 +425,7 @@ fn dash_move(
             }
         }
         if let Some(direction) = active_dash_direction {
-            player.movement_vec += map_dash_direction_to_vec2(direction) + vec2(0., -1. * GRAVITY);
+            player.movement_vec += map_dash_direction_to_vec2(direction);
         }
     }
 }
@@ -405,6 +434,56 @@ fn reset_dash(mut players: Query<&mut Player>) {
     for mut player in players.iter_mut() {
         if player.on_ground {
             player.can_dash = true;
+        }
+    }
+}
+
+fn climb(
+    mut climb_event: EventReader<PlayerClimbEvent>,
+    mut players: Query<(&mut Player, &Transform)>,
+    climbables: Query<&Transform, (With<Climbable>, Without<Player>)>
+) {
+    if climb_event.read().next().is_none() {
+        for (mut player, _) in players.iter_mut() {
+            player.climbing = false;
+        }
+        return;
+    }
+
+    for (mut player, p_transform) in players.iter_mut() {
+        let proper_climbable_opt = climbables.iter().find(|c_transform| {
+            let p_left_x = p_transform.translation.x - p_transform.scale.x / 2.;
+            let p_right_x = p_transform.translation.x + p_transform.scale.x / 2.;
+            let c_left_x = c_transform.translation.x - c_transform.scale.x / 2.;
+            let c_right_x = c_transform.translation.x + c_transform.scale.x / 2.;
+
+            let space_between1 = c_left_x - p_right_x;
+            let space_between2 = p_left_x - c_right_x;
+
+            if space_between1 == 0. || space_between2 == 0. {
+                // x coordinates are appropriate to climb
+            } else {
+                return false;
+            }
+
+            let p_top_y = p_transform.translation.y + p_transform.scale.y / 2.;
+            let p_bottom_y = p_transform.translation.y - p_transform.scale.y / 2.;
+            let c_top_y = c_transform.translation.y + c_transform.scale.y / 2.;
+            let c_bottom_y = c_transform.translation.y - c_transform.scale.y / 2.;
+
+            if (c_bottom_y..=c_top_y).contains(&p_top_y)
+                || (c_bottom_y..=c_top_y).contains(&p_bottom_y)
+                || (p_bottom_y..=p_top_y).contains(&c_top_y)
+                || (p_bottom_y..=p_top_y).contains(&c_bottom_y) {
+                return true;
+            }
+            false
+        });
+
+        if proper_climbable_opt.is_some() {
+            player.climbing = true;
+        } else {
+            player.climbing = false;
         }
     }
 }
