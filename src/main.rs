@@ -1,7 +1,9 @@
+use std::ops::Neg;
 use std::time::Duration;
 use bevy::math::vec2;
 use bevy::prelude::*;
 use bevy::sprite::collide_aabb::{collide, Collision};
+use lazy_static::lazy_static;
 
 fn main() {
     App::new()
@@ -32,6 +34,10 @@ const GRAVITY: f32 = -9.;
 const JUMP_DURATION: Duration = Duration::from_millis(750);
 const JUMP_POWER: f32 = 35.;
 const DASH_DURATION: Duration = Duration::from_millis(300);
+const DASH_POWER: f32 = 10.;
+lazy_static! {
+    static ref DIAGONAL_DASH_POWER: f32 = (DASH_POWER.powf(2.) / 2.).sqrt();
+}
 
 /// The ending duration when gravity power is greater than a jump power.
 const JUMP_ENDING_DURATION: Duration = Duration::from_millis(((GRAVITY * -1.) / JUMP_POWER * 1000.) as u64);
@@ -514,14 +520,14 @@ fn map_move_direction_to_vec2(direction: MoveDirection) -> Vec2 {
 
 fn map_dash_direction_to_vec2(direction: DashDirection) -> Vec2 {
     match direction {
-        DashDirection::Up => vec2(0., 10.),
-        DashDirection::UpRight => vec2(10., 10.),
-        DashDirection::Right => vec2(10., 0.),
-        DashDirection::DownRight => vec2(10., -10.),
-        DashDirection::Down => vec2(0., -10.),
-        DashDirection::DownLeft => vec2(-10., -10.),
-        DashDirection::Left => vec2(-10., 0.),
-        DashDirection::UpLeft => vec2(-10., 10.),
+        DashDirection::Up => vec2(0., DASH_POWER),
+        DashDirection::UpRight => vec2(*DIAGONAL_DASH_POWER, *DIAGONAL_DASH_POWER),
+        DashDirection::Right => vec2(DASH_POWER, 0.),
+        DashDirection::DownRight => vec2(*DIAGONAL_DASH_POWER, DIAGONAL_DASH_POWER.neg()),
+        DashDirection::Down => vec2(0., DASH_POWER.neg()),
+        DashDirection::DownLeft => vec2(DIAGONAL_DASH_POWER.neg(), DIAGONAL_DASH_POWER.neg()),
+        DashDirection::Left => vec2(DASH_POWER.neg(), 0.),
+        DashDirection::UpLeft => vec2(DIAGONAL_DASH_POWER.neg(), *DIAGONAL_DASH_POWER),
     }
 }
 
