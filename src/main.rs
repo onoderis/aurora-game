@@ -15,6 +15,7 @@ fn main() {
         .add_systems(Update, start_dash)
         .add_systems(Update, dash_move)
         .add_systems(Update, climb)
+        .add_systems(Update, climb_stop_jump)
         .add_systems(Update, gravity)
         .add_systems(Update, player_movement)
         .add_systems(Update, reset_dash)
@@ -484,6 +485,14 @@ fn climb(
             player.climbing = true;
         } else {
             player.climbing = false;
+        }
+    }
+}
+
+fn climb_stop_jump(mut players: Query<&mut Player>) {
+    for mut player in players.iter_mut() {
+        if player.climbing {
+            player.jumping_timer = None;
         }
     }
 }
