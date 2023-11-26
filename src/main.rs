@@ -11,8 +11,9 @@ fn main() {
         .add_systems(Update, player_movement_intention)
         .add_systems(Update, start_jump)
         .add_systems(Update, jump_lift)
-        .add_systems(Update, ceiling_jump_stop)
+        .add_systems(Update, ceiling_stop_jump)
         .add_systems(Update, start_dash)
+        .add_systems(Update, dash_stop_jump)
         .add_systems(Update, dash_move)
         .add_systems(Update, climb)
         .add_systems(Update, climb_stop_jump)
@@ -362,7 +363,7 @@ fn jump_lift(
     }
 }
 
-fn ceiling_jump_stop(
+fn ceiling_stop_jump(
     mut ceiling_event: EventReader<CeilingBumpEvent>,
     mut players: Query<&mut Player>,
 ) {
@@ -405,9 +406,14 @@ fn start_dash(
             source: asset_server.load("sounds/dash.ogg"),
             ..default()
         });
+    }
+}
 
-        // cancel jumping
-        player.jumping_timer = None;
+fn dash_stop_jump(mut players: Query<&mut Player>) {
+    for mut player in players.iter_mut() {
+        if player.dashing.is_some() {
+            player.jumping_timer = None;
+        }
     }
 }
 
