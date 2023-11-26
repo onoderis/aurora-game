@@ -1,21 +1,24 @@
 use std::time::Duration;
-use bevy::math::{vec3};
+use bevy::math::{vec2, vec3};
 use bevy::prelude::*;
-use bevy::sprite::collide_aabb::collide;
+use bevy::sprite::collide_aabb::{collide, Collision};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
         .add_systems(Update, input_to_event)
-        .add_systems(Update, player_movement)
+        .add_systems(Update, player_movement_intention)
         .add_systems(Update, gravity)
         .add_systems(Update, start_jump)
         .add_systems(Update, jump_lift)
+        .add_systems(Update, player_movement)
         .add_event::<PlayerMoveEvent>()
         .add_event::<PlayerJumpEvent>()
         .run();
 }
+
+const GRAVITY: f32 = -5.;
 
 #[derive(Bundle)]
 struct PlayerBundle {
@@ -28,6 +31,7 @@ struct PlayerBundle {
 struct Player {
     on_ground: bool,
     jumping_timer: Option<Timer>,
+    movement_vec: Vec2,
 }
 
 /// Obstacle for a player.
@@ -55,7 +59,11 @@ fn setup(mut commands: Commands) {
     // Player
     commands.spawn(
         PlayerBundle {
-            player: Player { on_ground: false, jumping_timer: None },
+            player: Player {
+                on_ground: false,
+                jumping_timer: None,
+                movement_vec: Vec2 { x: 0., y: 0. }
+            },
             sprite_bundle: SpriteBundle {
                 transform: Transform {
                     translation: Vec3::new(-300., 0., 10.),
@@ -122,10 +130,9 @@ fn input_to_event(
     }
 }
 
-fn player_movement(
+fn player_movement_intention(
     mut event_player_move: EventReader<PlayerMoveEvent>,
-    mut player: Query<&mut Transform, (With<Player>, Without<Obstacle>)>,
-    obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
+    mut players: Query<&mut Player>,
 ) {
     let event = if let Some(event) = event_player_move.read().next() {
         event
@@ -133,45 +140,65 @@ fn player_movement(
         return;
     };
 
-    for mut player_transform in player.iter_mut() {
-        let new_player_pos = player_transform.translation + map_direction_to_vec3(event.direction);
-        let collision_obstacle_opt = obstacles.iter().find(|obstacle_transform| {
-            collide(
-                new_player_pos,
-                player_transform.scale.xy(),
-                obstacle_transform.translation,
-                obstacle_transform.scale.xy(),
-            ).is_some()
-        });
-        if collision_obstacle_opt.is_none() {
-            player_transform.translation = new_player_pos;
-        }
+    for mut player in players.iter_mut() {
+        player.movement_vec += map_direction_to_vec2(event.direction);
     }
 }
 
-fn gravity(
-    mut player: Query<(&mut Transform, &mut Player), Without<Obstacle>>,
+fn gravity(mut players: Query<&mut Player>) {
+    for mut player in players.iter_mut() {
+        player.movement_vec += vec2(0., GRAVITY);
+    }
+}
+
+fn player_movement(
+    mut players: Query<(&mut Player, &mut Transform), Without<Obstacle>>,
     obstacles: Query<&Transform, (With<Obstacle>, Without<Player>)>,
 ) {
-    for (mut player_transform, mut player) in player.iter_mut() {
-        let new_player_pos = player_transform.translation + vec3(0., -5., 0.);
-        let collision_obstacle_opt = obstacles.iter().find(|obstacle_transform| {
-            collide(
+    for (mut player, mut p_transform) in players.iter_mut() {
+        for o_transform in obstacles.iter() {
+            let new_player_pos = p_transform.translation + player.movement_vec.to_vec3();
+            let collision_opt = collide(
+                o_transform.translation,
+                o_transform.scale.xy(),
                 new_player_pos,
-                player_transform.scale.xy(),
-                obstacle_transform.translation,
-                obstacle_transform.scale.xy(),
-            ).is_some()
-        });
+                p_transform.scale.xy(),
+            );
 
-        if let Some(collision_obstacle) = collision_obstacle_opt {
-            // ground the player
-            player_transform.translation.y = collision_obstacle.translation.y +
-                collision_obstacle.scale.y / 2.0 + player_transform.scale.y / 2.0;
-            player.on_ground = true;
-        } else {
-            player_transform.translation = new_player_pos;
+            if let Some(collision) = collision_opt {
+                match collision {
+                    Collision::Left  => {
+                        player.movement_vec.x = o_transform.translation.x
+                            - p_transform.translation.x
+                            + p_transform.scale.x / 2.
+                            + o_transform.scale.x / 2.;
+                    }
+                    Collision::Right => {
+                        player.movement_vec.x = o_transform.translation.x
+                            - p_transform.translation.x
+                            - p_transform.scale.x / 2.
+                            - o_transform.scale.x / 2.;
+                    }
+                    Collision::Top => {
+                        player.movement_vec.y = o_transform.translation.y
+                            - p_transform.translation.y
+                            - p_transform.scale.y / 2.
+                            - o_transform.scale.y / 2.;
+                    }
+                    Collision::Bottom => {
+                        player.movement_vec.y = o_transform.translation.y
+                            - p_transform.translation.y
+                            + p_transform.scale.y / 2.
+                            + o_transform.scale.y / 2.;
+                        player.on_ground = true;
+                    }
+                    Collision::Inside => {}
+                }
+            }
         }
+
+        p_transform.translation += player.movement_vec.to_vec3();
+        player.movement_vec = Vec2::ZERO;
     }
 }
 
@@ -197,14 +224,14 @@ fn start_jump(
 }
 
 fn jump_lift(
-    mut players: Query<(&mut Transform, &mut Player)>,
+    mut players: Query<&mut Player>,
     time: Res<Time>,
 ) {
-    for (mut transform, mut player) in players.iter_mut() {
+    for mut player in players.iter_mut() {
         if let Some(timer) = player.jumping_timer.as_mut() {
             timer.tick(time.delta());
             if timer.remaining() > Duration::ZERO {
-                transform.translation.y += 12.0; // 7 + gravity
+                player.movement_vec.y += (GRAVITY * -1.) + 7.;
                 player.on_ground = false;
             }
         }
@@ -215,9 +242,19 @@ fn jump_lift(
 
 // util functions
 
-fn map_direction_to_vec3(direction: MoveDirection) -> Vec3 {
+fn map_direction_to_vec2(direction: MoveDirection) -> Vec2 {
     match direction {
-        MoveDirection::Left => vec3(-5., 0., 0.),
-        MoveDirection::Right => vec3(5., 0., 0.),
+        MoveDirection::Left => vec2(-5., 0.),
+        MoveDirection::Right => vec2(5., 0.),
+    }
+}
+
+trait Vec2Extension {
+    fn to_vec3(self) -> Vec3;
+}
+
+impl Vec2Extension for Vec2 {
+    fn to_vec3(self) -> Vec3 {
+        Vec3 { x: self.x, y: self.y, z: 0. }
     }
 }
