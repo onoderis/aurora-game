@@ -445,6 +445,7 @@ fn ceiling_stop_jump(
         if let Some(timer) = player.jumping_timer.as_mut() {
             if timer.remaining() > JUMP_ENDING_DURATION {
                 timer.set_duration(JUMP_ENDING_DURATION);
+                timer.set_elapsed(Duration::ZERO);
             }
         }
     }
