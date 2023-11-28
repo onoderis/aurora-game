@@ -9,24 +9,56 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, input_to_event)
-        .add_systems(Update, player_movement_intention)
-        .add_systems(Update, start_jump)
-        .add_systems(Update, jump_lift)
-        .add_systems(Update, ceiling_stop_jump)
-        .add_systems(Update, start_dash)
-        .add_systems(Update, dash_stop_jump)
-        .add_systems(Update, dash_move)
-        .add_systems(Update, climb)
-        .add_systems(Update, climb_stop_jump)
-        .add_systems(Update, gravity)
-        .add_systems(Update, player_movement)
-        .add_systems(Update, reset_dash)
-        .add_event::<PlayerMoveEvent>()
-        .add_event::<PlayerJumpEvent>()
-        .add_event::<PlayerDashEvent>()
+        .configure_sets(
+            Update,
+            (
+                GameSystemSet::Input,
+                GameSystemSet::PlayerStateModification,
+                GameSystemSet::MovementVecModification,
+                GameSystemSet::Movement,
+                GameSystemSet::PostMovement
+            ).chain(),
+        )
+
+        .add_systems(Update, input_to_event.in_set(GameSystemSet::Input))
+
+        .add_systems(
+            Update,
+            (
+                start_jump,
+                start_dash,
+                dash_stop_jump,
+                climb,
+                climb_stop_jump,
+            )
+                .in_set(GameSystemSet::PlayerStateModification),
+        )
+
+        .add_systems(
+            Update,
+            (
+                jump_lift,
+                player_side_movements,
+                dash_move,
+                gravity,
+            ).in_set(GameSystemSet::MovementVecModification),
+        )
+
+        .add_systems(Update, player_movement.in_set(GameSystemSet::Movement))
+
+        .add_systems(
+            Update,
+            (
+                reset_dash,
+                ceiling_stop_jump,
+            ).in_set(GameSystemSet::PostMovement)
+        )
+
+        .add_event::<PlayerMoveInputEvent>()
+        .add_event::<PlayerJumpInputEvent>()
+        .add_event::<PlayerDashInputEvent>()
+        .add_event::<PlayerClimbInputEvent>()
         .add_event::<CeilingBumpEvent>()
-        .add_event::<PlayerClimbEvent>()
         .run();
 }
 
@@ -41,6 +73,16 @@ lazy_static! {
 
 /// The ending duration when gravity power is greater than a jump power.
 const JUMP_ENDING_DURATION: Duration = Duration::from_millis(((GRAVITY * -1.) / JUMP_POWER * 1000.) as u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(SystemSet)]
+enum GameSystemSet {
+    Input,
+    PlayerStateModification,
+    MovementVecModification,
+    Movement,
+    PostMovement,
+}
 
 #[derive(Bundle)]
 struct PlayerBundle {
@@ -67,7 +109,7 @@ struct Obstacle;
 struct Climbable;
 
 #[derive(Event)]
-struct PlayerMoveEvent {
+struct PlayerMoveInputEvent {
     direction: MoveDirection,
 }
 
@@ -78,13 +120,13 @@ enum MoveDirection {
 }
 
 #[derive(Event)]
-struct PlayerJumpEvent;
+struct PlayerJumpInputEvent;
 
 #[derive(Event)]
 struct CeilingBumpEvent;
 
 #[derive(Event)]
-struct PlayerDashEvent {
+struct PlayerDashInputEvent {
     direction: DashDirection,
 }
 
@@ -106,7 +148,7 @@ struct Dashing {
 }
 
 #[derive(Event)]
-struct PlayerClimbEvent;
+struct PlayerClimbInputEvent;
 
 
 fn setup(mut commands: Commands) {
@@ -195,20 +237,20 @@ fn setup(mut commands: Commands) {
 
 fn input_to_event(
     key_input: Res<Input<KeyCode>>,
-    mut event_player_move: EventWriter<PlayerMoveEvent>,
-    mut event_player_jump: EventWriter<PlayerJumpEvent>,
-    mut event_player_dash: EventWriter<PlayerDashEvent>,
-    mut event_player_climb: EventWriter<PlayerClimbEvent>,
+    mut event_player_move: EventWriter<PlayerMoveInputEvent>,
+    mut event_player_jump: EventWriter<PlayerJumpInputEvent>,
+    mut event_player_dash: EventWriter<PlayerDashInputEvent>,
+    mut event_player_climb: EventWriter<PlayerClimbInputEvent>,
 ) {
     if key_input.pressed(KeyCode::Left) {
-        event_player_move.send(PlayerMoveEvent { direction: MoveDirection::Left })
+        event_player_move.send(PlayerMoveInputEvent { direction: MoveDirection::Left })
     }
     if key_input.pressed(KeyCode::Right) {
-        event_player_move.send(PlayerMoveEvent { direction: MoveDirection::Right })
+        event_player_move.send(PlayerMoveInputEvent { direction: MoveDirection::Right })
     }
 
     if key_input.just_pressed(KeyCode::C) {
-        event_player_jump.send(PlayerJumpEvent)
+        event_player_jump.send(PlayerJumpInputEvent)
     }
 
     if key_input.just_pressed(KeyCode::X) {
@@ -228,17 +270,17 @@ fn input_to_event(
             _ => None
         };
         if let Some(direction) = direction {
-            event_player_dash.send(PlayerDashEvent { direction });
+            event_player_dash.send(PlayerDashInputEvent { direction });
         }
     }
 
     if key_input.pressed(KeyCode::Z) {
-        event_player_climb.send(PlayerClimbEvent);
+        event_player_climb.send(PlayerClimbInputEvent);
     }
 }
 
-fn player_movement_intention(
-    mut event_player_move: EventReader<PlayerMoveEvent>,
+fn player_side_movements(
+    mut event_player_move: EventReader<PlayerMoveInputEvent>,
     mut players: Query<&mut Player>,
 ) {
     let event = if let Some(event) = event_player_move.read().next() {
@@ -325,6 +367,7 @@ fn player_movement(
 
         p_transform.translation += player.movement_vec.to_vec3();
         player.movement_vec = Vec2::ZERO;
+
         player.on_ground = has_bottom_collision;
         if ceiling_bump {
             ceiling_event.send(CeilingBumpEvent);
@@ -333,7 +376,7 @@ fn player_movement(
 }
 
 fn start_jump(
-    mut event_jump: EventReader<PlayerJumpEvent>,
+    mut event_jump: EventReader<PlayerJumpInputEvent>,
     mut players: Query<&mut Player>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
@@ -370,10 +413,10 @@ fn jump_lift(
 }
 
 fn ceiling_stop_jump(
-    mut ceiling_event: EventReader<CeilingBumpEvent>,
+    mut ceiling_bump_event: EventReader<CeilingBumpEvent>,
     mut players: Query<&mut Player>,
 ) {
-    if ceiling_event.read().next().is_none() {
+    if ceiling_bump_event.read().next().is_none() {
         return;
     }
 
@@ -387,7 +430,7 @@ fn ceiling_stop_jump(
 }
 
 fn start_dash(
-    mut dash_event: EventReader<PlayerDashEvent>,
+    mut dash_event: EventReader<PlayerDashInputEvent>,
     mut players: Query<&mut Player>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
@@ -452,7 +495,7 @@ fn reset_dash(mut players: Query<&mut Player>) {
 }
 
 fn climb(
-    mut climb_event: EventReader<PlayerClimbEvent>,
+    mut climb_event: EventReader<PlayerClimbInputEvent>,
     mut players: Query<(&mut Player, &Transform)>,
     climbables: Query<&Transform, (With<Climbable>, Without<Player>)>
 ) {
