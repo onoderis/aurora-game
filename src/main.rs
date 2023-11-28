@@ -1,7 +1,10 @@
 use std::ops::Neg;
 use std::time::Duration;
+
 use bevy::math::vec2;
 use bevy::prelude::*;
+use bevy::reflect::List;
+use bevy::sprite::Anchor;
 use bevy::sprite::collide_aabb::{collide, Collision};
 use lazy_static::lazy_static;
 
@@ -16,7 +19,8 @@ fn main() {
                 GameSystemSet::PlayerStateModification,
                 GameSystemSet::MovementVecModification,
                 GameSystemSet::Movement,
-                GameSystemSet::PostMovement
+                GameSystemSet::PostMovement,
+                GameSystemSet::Debug,
             ).chain(),
         )
 
@@ -54,6 +58,8 @@ fn main() {
             ).in_set(GameSystemSet::PostMovement)
         )
 
+        .add_systems(Update, update_player_debug.in_set(GameSystemSet::Debug))
+
         .add_event::<PlayerMoveInputEvent>()
         .add_event::<PlayerJumpInputEvent>()
         .add_event::<PlayerDashInputEvent>()
@@ -64,7 +70,7 @@ fn main() {
 
 const GRAVITY: f32 = -9.;
 const JUMP_DURATION: Duration = Duration::from_millis(750);
-const JUMP_POWER: f32 = 35.;
+const JUMP_POWER: f32 = 25.;
 const DASH_DURATION: Duration = Duration::from_millis(300);
 const DASH_POWER: f32 = 10.;
 lazy_static! {
@@ -82,6 +88,7 @@ enum GameSystemSet {
     MovementVecModification,
     Movement,
     PostMovement,
+    Debug,
 }
 
 #[derive(Bundle)]
@@ -91,7 +98,7 @@ struct PlayerBundle {
 }
 
 /// Controllable entity by a player.
-#[derive(Component)]
+#[derive(Component, Debug)]
 struct Player {
     on_ground: bool,
     movement_vec: Vec2,
@@ -130,7 +137,7 @@ struct PlayerDashInputEvent {
     direction: DashDirection,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum DashDirection {
     Up,
     UpRight,
@@ -142,6 +149,7 @@ enum DashDirection {
     UpLeft,
 }
 
+#[derive(Debug, Clone)]
 struct Dashing {
     direction: DashDirection,
     timer: Timer,
@@ -233,6 +241,19 @@ fn setup(mut commands: Commands) {
             ..default()
         },
     ));
+
+    // Debug player information
+    commands.spawn(
+        Text2dBundle {
+            text: Text::from_section("-", TextStyle::default()),
+            text_anchor: Anchor::TopLeft,
+            transform: Transform {
+                translation: Vec3::new((-1280. / 2.) + 5., (720. / 2.) - 5., 100.),
+                ..default()
+            },
+            ..default()
+        },
+    );
 }
 
 fn input_to_event(
@@ -549,6 +570,38 @@ fn climb_stop_jump(mut players: Query<&mut Player>) {
         if player.climbing {
             player.jumping_timer = None;
         }
+    }
+}
+
+fn update_player_debug(
+    mut texts: Query<&mut Text>,
+    players: Query<&Player>,
+) {
+    let player = if let Some(player) = players.iter().next() {
+        player
+    } else {
+        return;
+    };
+
+    for mut text in texts.iter_mut() {
+        text.sections[0].value = format!(
+            "on_ground: {:?}\n\
+            jumping_timer.elapsed: {:?}\n\
+            jumping_timer.duration: {:?}\n\
+            dashing.direction: {:?}\n\
+            dashing.elapsed: {:?}\n\
+            dashing.duration: {:?}\n\
+            can_dash: {:?}\n\
+            climbing: {:?}",
+            player.on_ground,
+            player.jumping_timer.clone().map(|it| { it.elapsed() }),
+            player.jumping_timer.clone().map(|it| { it.duration() }),
+            player.dashing.clone().map(|it| { it.direction }),
+            player.dashing.clone().map(|it| { it.timer.elapsed() }),
+            player.dashing.clone().map(|it| { it.timer.duration() }),
+            player.can_dash,
+            player.climbing,
+        );
     }
 }
 
