@@ -32,8 +32,7 @@ fn main() {
                 start_jump,
                 start_dash,
                 dash_stop_jump,
-                climb,
-                climb_stop_jump,
+                (climb, climb_stop_jump).chain(),
             )
                 .in_set(GameSystemSet::PlayerStateModification),
         )
