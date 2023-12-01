@@ -60,7 +60,7 @@ fn main() {
             ).in_set(GameSystemSet::PostMovement)
         )
 
-        .add_systems(Update, update_player_debug.in_set(GameSystemSet::Debug))
+        // .add_systems(Update, update_player_debug.in_set(GameSystemSet::Debug))
 
         .add_event::<PlayerMoveInputEvent>()
         .add_event::<PlayerJumpInputEvent>()
