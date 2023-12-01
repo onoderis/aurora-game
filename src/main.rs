@@ -6,11 +6,13 @@ use bevy::prelude::*;
 use bevy::reflect::List;
 use bevy::sprite::Anchor;
 use bevy::sprite::collide_aabb::{collide, Collision};
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use lazy_static::lazy_static;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(WorldInspectorPlugin::new())
         .add_systems(Startup, setup)
         .configure_sets(
             Update,
