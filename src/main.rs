@@ -30,8 +30,7 @@ fn main() {
             Update,
             (
                 start_jump,
-                start_dash,
-                dash_stop_jump,
+                (start_dash, dash_stop_jump).chain(),
                 (climb, climb_stop_jump).chain(),
             )
                 .in_set(GameSystemSet::PlayerStateModification),
@@ -52,6 +51,7 @@ fn main() {
         .add_systems(
             Update,
             (
+                // move_camera,
                 reset_dash,
                 ceiling_stop_jump,
             ).in_set(GameSystemSet::PostMovement)
@@ -575,34 +575,58 @@ fn climb_stop_jump(mut players: Query<&mut Player>) {
 
 fn update_player_debug(
     mut texts: Query<&mut Text>,
-    players: Query<&Player>,
+    players: Query<(&Player, &Transform)>,
 ) {
-    let player = if let Some(player) = players.iter().next() {
-        player
+    let (player, transform) = if let Some(pt) = players.iter().next() {
+        pt
     } else {
         return;
     };
 
     for mut text in texts.iter_mut() {
-        text.sections[0].value = format!(
-            "on_ground: {:?}\n\
+        text.sections[0].value = format!("\
+            x: {}\n\
+            y: {}\n\
+            on_ground: {}\n\
+            can_dash: {}\n\
+            climbing: {}\n\
             jumping_timer.elapsed: {:?}\n\
             jumping_timer.duration: {:?}\n\
             dashing.direction: {:?}\n\
             dashing.elapsed: {:?}\n\
             dashing.duration: {:?}\n\
-            can_dash: {:?}\n\
-            climbing: {:?}",
+            ",
+            transform.translation.x,
+            transform.translation.y,
             player.on_ground,
+            player.can_dash,
+            player.climbing,
             player.jumping_timer.clone().map(|it| { it.elapsed() }),
             player.jumping_timer.clone().map(|it| { it.duration() }),
             player.dashing.clone().map(|it| { it.direction }),
             player.dashing.clone().map(|it| { it.timer.elapsed() }),
             player.dashing.clone().map(|it| { it.timer.duration() }),
-            player.can_dash,
-            player.climbing,
         );
     }
+}
+
+fn move_camera(
+    mut camera_transform: Query<&mut Transform, With<Camera>>,
+    player_transform: Query<&Transform, (With<Player>, Without<Camera>)>,
+) {
+    let mut camera_transform = if let Some(ct) = camera_transform.iter_mut().next() {
+        ct
+    } else {
+        return;
+    };
+
+    let player_transform = if let Some(pt) = player_transform.iter().next() {
+        pt
+    } else {
+        return;
+    };
+
+    camera_transform.translation.x = player_transform.translation.x;
 }
 
 // util functions
