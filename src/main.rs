@@ -1,5 +1,6 @@
 use std::ops::Neg;
 use std::time::Duration;
+use bevy::audio::PlaybackMode;
 
 use bevy::math::vec2;
 use bevy::prelude::*;
@@ -413,7 +414,10 @@ fn start_jump(
         player.jumping_timer = Some(Timer::new(JUMP_DURATION, TimerMode::Once));
         commands.spawn(AudioBundle {
             source: asset_server.load("sounds/jump.ogg"),
-            ..default()
+            settings: PlaybackSettings {
+                mode: PlaybackMode::Despawn,
+                ..default()
+            }
         });
     }
 }
@@ -476,7 +480,10 @@ fn start_dash(
         player.can_dash = false;
         commands.spawn(AudioBundle {
             source: asset_server.load("sounds/dash.ogg"),
-            ..default()
+            settings: PlaybackSettings {
+                mode: PlaybackMode::Despawn,
+                ..default()
+            }
         });
     }
 }
